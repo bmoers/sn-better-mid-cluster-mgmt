@@ -1,0 +1,67 @@
+version: "3.6"
+
+services:
+  mid_right:
+    image: moers/mid-server:newyork.12-17-2019_0856
+    hostname: mid-right
+    env_file: .env
+  
+  mid_left:
+    image: moers/mid-server:newyork.12-17-2019_0856
+    hostname: mid-left
+    env_file: .env
+
+  mid_red:
+    image: moers/mid-server:newyork.12-17-2019_0856
+    hostname: mid-red
+    env_file: .env
+
+  mid_green:
+    image: moers/mid-server:newyork.12-17-2019_0856
+    hostname: mid-green
+    env_file: .env
+
+  db:
+    image: mariadb:10.4.12
+    command:
+      - "--character-set-client-handshake=FALSE"
+      - "--character-set-server=utf8mb4"
+      - "--collation-server=utf8mb4_general_ci"
+      # underscore version of above
+      - "--character_set_server=utf8mb4"
+      - "--collation_server=utf8mb4_general_ci"
+
+      #- "--innodb=ON"
+      - "--performance-schema=OFF"
+
+      # The maximum number of simultaneous client connections [151]
+      - "--max-connections=26"
+      # InnoDB buffer pool size in bytes. The primary value to adjust on a database server with entirely/primarily XtraDB/InnoDB tables, 
+      # can be set up to 80% of the total memory in these environments. [128MB]
+      - "--innodb-buffer-pool-size=64M"
+      # The largest size for temporary tables in memory (not MEMORY tables) although if max_heap_table_size is smaller the lower limit will apply. [16MB]
+      - "--tmp-table-size=8M"
+      # Number of table definitions that can be cached. [400]
+      - "--table-definition-cache=400"
+      
+      # -----> might solve the issue:
+      # [Warning] Aborted connection 8 to db: 'unconnected' user: 'unauthenticated' host: '172.28.0.3' (This connection closed normally without authentication)
+      - "--max-allowed-packet=256M"
+      # The number of seconds the server waits for activity on a noninteractive connection before closing it. [28800]
+      - "--wait_timeout=86400"
+      # Time in seconds that the server waits for an interactive connection (one that connects with the mysql_real_connect() 
+      # CLIENT_INTERACTIVE option) to become active before closing it. [28800]
+      - "--interactive-timeout=28800"
+
+      # Determines which additional warnings are logged. Setting to 0 disables additional warning logging [2]
+      - "--log-warnings=1"
+
+    env_file: .env
+
+    security_opt:
+      - seccomp:unconfined
+    volumes:
+      - ./maria-db:/var/lib/mysql
+    ports:
+      - 33069:3306
+    
