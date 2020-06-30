@@ -1,6 +1,17 @@
-
+/**
+ * Better MID Cluster Management
+ * 
+ * This is a drop in replacement for the 'MID Server Cluster Management' business rule (/sys_script.do?sys_id=297749870a0006bc2145d31c2d2335b9)
+ * Make sure /sys_script.do?sys_id=297749870a0006bc2145d31c2d2335b9 is active=false!
+ * 
+ * Unfortunately the OOB LB/FO script is not very mature and assigns always the same FO agent in case of agent down.
+ * 
+ * For more details see https://github.com/bmoers/sn-better-mid-cluster-mgmt/blob/master/README.md
+ * 
+ * The source and test cases can be found here https://github.com/bmoers/sn-better-mid-cluster-mgmt
+ * 
+*/
 (function (current) {
-
 
     /**
      * Find a Load Balancer for the passed Agent.
@@ -9,10 +20,10 @@
      *  - find failover agents for stopped load balancer agents
      *  - get a random agent from all agents collected above
      * 
-     * This function does only 2 SQL queries in total.
+     * (This function runs only 2 SQL queries in total)
      * 
-     * @param {GlideRecord} agentGr the glideRecord of the agent to load balance or failover
-     * @returns {String} the agent name. the LB or if no LB found the current one.
+     * @param {GlideRecord} agentGr The GlideRecord of the agent to load balance or failover
+     * @returns {String} The agent name (The LB or if no LB found the current one)
      */
     var findLoadBalancerForAgent = function (agentGr) {
 
@@ -25,6 +36,26 @@
         var UP_STATE = 'Up';
         var FAILOVER = 'Failover';
 
+        var DEBUG_ENABLED = gs.getProperty('better_mid_server.cluster.debug', 'false') == 'true';
+
+        var log = {
+            debug: function () {
+                if (!DEBUG_ENABLED)
+                    return;
+                var args = Array.prototype.slice.call(arguments);
+                if (args.length)
+                    args[0] = '[Better MID Cluster] : ' + args[0];
+                gs.debug.apply(this, args);
+            },
+            info: function () {
+                var args = Array.prototype.slice.call(arguments);
+                if (args.length)
+                    args[0] = '[Better MID Cluster] : ' + args[0];
+                gs.info.apply(this, args);
+            }
+        };
+
+
         /**
          * Helper function to make fields in an array unique.
          * @param {*} value 
@@ -33,7 +64,7 @@
          */
         var onlyUnique = function (value, index, self) {
             return self.indexOf(value) === index;
-        }
+        };
 
         /**
          * Find all capabilities for the passed agents in ONE sql query.
@@ -53,7 +84,7 @@
             gr.addQuery("agent", 'IN', agentSysIdArr.join(','));
             gr.query();
 
-            gs.info("ecc_agent_capability_m2m.do " + gr.getEncodedQuery())
+            log.debug("_getAgentCapabilities : ecc_agent_capability_m2m.do " + gr.getEncodedQuery());
 
             while (gr.next()) {
 
@@ -110,7 +141,7 @@
 
             Object.keys(foCapabilities).forEach(function (foAgentSysId) {
                 var candidateCaps = foCapabilities[foAgentSysId];
-                gs.info("Agent caps " + JSON.stringify(agentCaps) + " - candidateCaps :" + JSON.stringify(candidateCaps));
+                log.debug("_filterOnCapabilities : Agent caps " + JSON.stringify(agentCaps) + " - candidateCaps :" + JSON.stringify(candidateCaps));
 
                 // if the candidate can do 'ALL' it is always capable to take over
                 if (candidateCaps.indexOf('ALL') !== -1) {
@@ -118,10 +149,10 @@
                 } else if (_isSubset(agentCaps, candidateCaps)) { // check the candidate capabilities are more or equal the current
                     newClusterAgents.push(foAgentSysId);
                 }
-            })
+            });
 
             return newClusterAgents;
-        }
+        };
 
         /**
          * Get the clusterMember construct.
@@ -147,7 +178,7 @@
                 }
             };
          */
-        var getAllClusterMembers = function (allClusters) {
+        var getAllClusterMembers = function () {
 
             // get all clusters
             var gr = new GlideRecord('ecc_agent_cluster_member_m2m');
@@ -168,9 +199,8 @@
 
                 var agentSysId = gr.agent.toString();
                 var agentName = gr.agent.name.toString();
-                var agentStatus = gr.agent.status.toString() // 'Up' / 'Down' / 'Upgrade Failed'
+                var agentStatus = gr.agent.status.toString(); // 'Up' / 'Down' / 'Upgrade Failed'
                 var isUp = (agentStatus == UP_STATE);
-
 
                 // all agents
                 if (!allClusters.agents[agentSysId])
@@ -178,10 +208,14 @@
 
                 allClusters.agents[agentSysId][type].push(clusterSysId);
 
-
                 // for the clusters we need all agents, regardless if up or down
-                if (!allClusters[type][clusterSysId])
-                    allClusters[type][clusterSysId] = { agentsUp: [], agentsDown: [] };
+                if (!allClusters[type][clusterSysId]) {
+                    allClusters[type][clusterSysId] = { agentsUp: [] };
+                    if (!isFailover) {
+                        // only load balancer have agentsDown
+                        allClusters[type][clusterSysId].agentsDown = [];
+                    }
+                }
 
                 /*
                     add all LoadBalance clusters agents
@@ -197,14 +231,15 @@
                     // only keep the running failover agents
                     allClusters[type][clusterSysId].agentsUp.push(agentSysId);
                 }
+                
+            }
 
-            };
-
+            log.debug('getAllClusterMembers : ' + JSON.stringify(allClusters));
             return allClusters;
         };
 
         var getRandomMidServer = function (sameCapFoAgents) {
-            gs.info("up and running agents with same capabilities " + JSON.stringify(sameCapFoAgents));
+            log.debug("getRandomMidServer : up and running agents with same capabilities " + JSON.stringify(sameCapFoAgents));
 
             var lbAgentsNum = sameCapFoAgents.length;
             if (lbAgentsNum) {
@@ -219,7 +254,7 @@
                 }
             }
             return null;
-        }
+        };
 
         var getSameCapAgentFromFailover = function (currAgent) {
             var upFailoverAgents = [];
@@ -234,14 +269,14 @@
 
             var sameCapFoAgents = _filterOnCapabilities(agentSysId, upFailoverAgents);
             return getRandomMidServer(sameCapFoAgents);
-        }
+        };
 
         var getSameCapAgentFromLoadBalance = function (currAgent) {
             // list of agents to share the load
             var upLoadBalanceAgents = [];
             var downLoadBalanceAgents = [];
             var upFailoverAgents = [];
-            
+
             // these are all load balancers to the current mid server
             currAgent.loadBalance.forEach(function (lbSysId) {
                 // find all the down load balancers nodes and replace it with one failover node
@@ -258,9 +293,9 @@
             upLoadBalanceAgents = upLoadBalanceAgents.filter(onlyUnique);
             downLoadBalanceAgents = downLoadBalanceAgents.filter(onlyUnique);
 
-            gs.info("current agent load balancers " + JSON.stringify(currAgent.loadBalance))
-            gs.info("current agent running load balancer partners " + JSON.stringify(upLoadBalanceAgents))
-            gs.info("current agent stopped load balancer partners " + JSON.stringify(downLoadBalanceAgents))
+            log.debug("getSameCapAgentFromLoadBalance : current agent load balancers " + JSON.stringify(currAgent.loadBalance));
+            log.debug("getSameCapAgentFromLoadBalance : current agent running load balancer partners " + JSON.stringify(upLoadBalanceAgents));
+            log.debug("getSameCapAgentFromLoadBalance : current agent stopped load balancer partners " + JSON.stringify(downLoadBalanceAgents));
 
             downLoadBalanceAgents.forEach(function (downAgentSysId) {
                 var downAgent = allClusters.agents[downAgentSysId];
@@ -275,15 +310,15 @@
                         return;
 
                     upFailoverAgents = upFailoverAgents.concat(failoverCluster.agentsUp);
-                })
-            })
+                });
+            });
 
             // remove duplicates
             upFailoverAgents = upFailoverAgents.filter(onlyUnique);
-            gs.info("up running failover agents " + JSON.stringify(upFailoverAgents) + " to take over from stopped " + JSON.stringify(downLoadBalanceAgents))
 
-            gs.info("Num down agents " + downLoadBalanceAgents.length);
-            gs.info("Num failover agents " + upFailoverAgents.length);
+            log.debug("getSameCapAgentFromLoadBalance : up running failover agents " + JSON.stringify(upFailoverAgents) + " to take over from stopped " + JSON.stringify(downLoadBalanceAgents));
+            log.debug("getSameCapAgentFromLoadBalance : num down agents " + downLoadBalanceAgents.length);
+            log.debug("getSameCapAgentFromLoadBalance : num failover agents " + upFailoverAgents.length);
 
             // if there are less or equal number of failover agents in place, take them all
             if (upFailoverAgents.length <= downLoadBalanceAgents.length) {
@@ -291,28 +326,23 @@
                 upLoadBalanceAgents = upLoadBalanceAgents.concat(upFailoverAgents);
             } else {
                 // there are more failover agents available then we need to have, random pick some
-
                 downLoadBalanceAgents.forEach(function () {
-                    randomPos = Math.floor(Math.random() * upFailoverAgents.length)
+                    randomPos = Math.floor(Math.random() * upFailoverAgents.length);
                     // select a random failover from the remaining list
                     // splice makes the 'currentDownAgentsUpFailoverAgents' shorter by 1 every time it runs
-                    upLoadBalanceAgents.push(upFailoverAgents.splice(randomPos, 1)[0])
+                    upLoadBalanceAgents.push(upFailoverAgents.splice(randomPos, 1)[0]);
                 });
-
             }
 
-
-            gs.info("up and running agents " + JSON.stringify(upLoadBalanceAgents));
+            log.debug("getSameCapAgentFromLoadBalance : up and running agents " + JSON.stringify(upLoadBalanceAgents));
 
             var sameCapFoAgents = _filterOnCapabilities(agentSysId, upLoadBalanceAgents);
             return getRandomMidServer(sameCapFoAgents);
 
-        }
+        };
 
         // get all defined clusters and members on the platform
         var allClusters = getAllClusterMembers();
-
-        gs.info(JSON.stringify(allClusters))
 
         // get the current agent object from that cluster
         var currAgent = allClusters.agents[agentSysId];
@@ -320,7 +350,7 @@
         // check if the agent hast at least one failover or loadBalance agent
         if (!currAgent || (currAgent.failover.length == 0 && currAgent.loadBalance.length == 0)) {
             // mid server has no failover or load balance configuration
-            gs.info("no lb/fo agents found for agent (sys_id) " + agentSysId);
+            log.debug("no lb/fo agents found for agent (sys_id) " + agentSysId);
             return agentFallbackName;
         }
 
@@ -334,13 +364,12 @@
         var lbAgent = getSameCapAgentFromLoadBalance(currAgent);
         return lbAgent || agentFallbackName;
 
-    }
+    };
 
     /*
         this is OOB code from /sys_script.do?sys_id=297749870a0006bc2145d31c2d2335b9 (MID Server Cluster Management)
         START
     */
-
     var getMIDServerGr = function () {
         var agentName = current.agent;
         agentName = agentName.substring("mid.server.".length, agentName.length);
