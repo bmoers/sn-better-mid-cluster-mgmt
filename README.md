@@ -29,12 +29,9 @@ The [findLoadBalancerForAgent](better-mid-cluster-mgm.js#L17) script implements 
 #### Installation
 
 1. Disable (active = false) the [MID Server Cluster Management] Business Rule on 'ecc_queue'
-2. Create a copy of it ('insert and stay')
-    1. Make sure active is true again
-    2. Copy the code from [better-mid-cluster-mgm.js](better-mid-cluster-mgm.js) to the script filed
+2. Install the [Better MID Server Cluster Management] update set
 3. Add a comment to the platform upgrade run book to document the change and describe how to deal with upgrade conflicts in the future.
 
-**OR** install the [Better MID Server Cluster Management] update set
 
 
 ## ECC Queue Failover of running import jobs
