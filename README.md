@@ -77,7 +77,9 @@ To prevent from importing duplicates **ONE** of the following can be done:
 
 ## MID cluster debugging
 
-Set the system property `mid_server.cluster.debug` to `true` to enable debug log in [MIDServerCluster]
+Set the system property `better_mid_server.cluster.debug` to `true` to enable debug log in `Better MID Server Cluster Management` (gs.debug() used)
+
+Set the system property `mid_server.cluster.debug` to `true` to enable logging in [MIDServerCluster]
 
 ## Files
 
