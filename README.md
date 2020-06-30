@@ -34,6 +34,9 @@ The [findLoadBalancerForAgent](better-mid-cluster-mgm.js#L17) script implements 
     2. Copy the code from [better-mid-cluster-mgm.js](better-mid-cluster-mgm.js) to the script filed
 3. Add a comment to the platform upgrade run book to document the change and describe how to deal with upgrade conflicts in the future.
 
+**OR** install the [Better MID Server Cluster Management] update set
+
+
 ## ECC Queue Failover of running import jobs
 
 ServiceNow supports to failover started jobs to a declared failover MID server. However this is can cause duplicate imports as the processed jobs (before the MID is down) will not be cleaned up automatically and the new job (on the failover MID server) will start again from the beginning (there is no alternative as by the nature of SQL and the DB the response can divert).
@@ -98,3 +101,4 @@ Set the system property `mid_server.cluster.debug` to `true` to enable debug log
 [MIDServerCluster]: https://dev000000.service-now.com/sys_script_include.do?sys_id=f6c69a020a0006bc36db905d8d02dfc2
 [MID Server Cluster Management]: https://dev000000.service-now.com/sys_script.do?sys_id=297749870a0006bc2145d31c2d2335b9
 [Fail over MID server]: https://dev000000.service-now.com/sysevent_script_action.do?sys_id=f6c24d230a0006bc394931345fba7a8a
+[Better MID Server Cluster Management]: better-mid-cluster-mgm.xml
