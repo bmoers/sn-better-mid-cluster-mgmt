@@ -1,6 +1,6 @@
 # ECC Queue Failover & Load Balance for ServiceNow done right
 
-Unfortunately the MID server cluster management in ServiceNow is not done in a mature way. On MID agent down always the same failover agent is selected (no load balancing in place anymore). In case of running jobs during the MID agent outage, reassigning the job to a failover agent can also cause duplicates in import jobs.
+Unfortunately, the MID server cluster management in ServiceNow is not done in a mature way. On MID agent down always the same failover agent is selected (no load balancing in place anymore). In case of running jobs during the MID agent outage, reassigning the job to a failover agent can also cause duplicates in import jobs.
 
 ## ECC Failover MID agent issue
 
@@ -15,7 +15,7 @@ In case of MID server down the [MIDServerCluster] script include is designed to 
 
 #### To be rule
 
-- Find all load balance agents (or or down), find a failover for every down load balance agent, select random load balance agent.
+- Find all load balance agents (up or down), find a failover for every down load balance agent, select random load balance agent.
 - If no load balance agent is defined, select random from failover
 
 #### Capability check issue
