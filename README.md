@@ -30,7 +30,7 @@ There are two options to install the Better MID Server Cluster Management:
 
 > If you're ok with changing the OOB script include OR **use the MID discovery feature**, use this version.
 
-The [BetterMIDServerCluster](better-mid-server-cluster.js) script include implements the same API as the OOB script [MIDServerCluster] but does things right, implements the 'To be rule' and fixes the capability issue. It also only requires two GlideRecord queries to lookup the corresponding agent ('ecc_agent_cluster_member_m2m' and 'ecc_agent_capability_m2m'). It also works natively with the [Fail over MID server] event.
+The [BetterMIDServerCluster] script include implements the same API as the OOB script [MIDServerCluster] but does things right, implements the 'To be rule' and fixes the capability issue. It also only requires two GlideRecord queries to lookup the corresponding agent ('ecc_agent_cluster_member_m2m' and 'ecc_agent_capability_m2m'). It also works natively with the [Fail over MID server] event.
 
 To install follow these steps:
 
@@ -91,7 +91,7 @@ To prevent from importing duplicates **ONE** of the following can be done:
         ic.clean();
         ```
 
-- Disable the failover event script (**suggested**, except you use **discovery**). Reassigning started jobs to another agent is obviously causing more issues than it solves. To prevent the platform from doing this set `active=false` on [Fail over MID server]. The only downside of this is that the DiscoveryAgents are also not reassigned.
+- Disable the failover event script (**suggested**, except you **use discovery**). Reassigning started jobs to another agent is obviously causing more issues than it solves. To prevent the platform from doing this set `active=false` on [Fail over MID server]. The only downside of this is that the DiscoveryAgents are also not reassigned.
 
 ## MID cluster debugging
 
@@ -124,3 +124,4 @@ Set the system property `mid_server.cluster.debug` to `true` to enable logging i
 
 [Better MID Server Cluster Management]: us/better-mid-cluster-mgm.xml
 [Better MID Server Cluster]: us/better-mid-cluster-us.xml
+[BetterMIDServerCluster] : better-mid-server-cluster.js
