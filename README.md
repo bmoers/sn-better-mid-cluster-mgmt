@@ -113,6 +113,7 @@ Set the system property `mid_server.cluster.debug` to `true` to enable logging i
 ### Business Rule
 
 - [MID Server Cluster Management] on 'ecc_queue', to re assign the job to a load balance or failover agent
+- [Better MID Server Cluster Management](better-mid-cluster-mgm.js) on 'ecc_queue', as a replacement for above
 
 ### Script Action
 
