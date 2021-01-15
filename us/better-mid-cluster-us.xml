@@ -1,0 +1,593 @@
+<?xml version="1.0" encoding="UTF-8"?><unload unload_date="2021-01-15 14:13:40">
+<sys_remote_update_set action="INSERT_OR_UPDATE">
+<application display_value="Global">global</application>
+<application_name>Global</application_name>
+<application_scope>global</application_scope>
+<application_version/>
+<collisions/>
+<commit_date/>
+<deleted/>
+<description/>
+<inserted/>
+<name>Better MID Cluster</name>
+<origin_sys_id/>
+<parent display_value=""/>
+<release_date/>
+<remote_base_update_set display_value=""/>
+<remote_parent_id/>
+<remote_sys_id>8d62b2982f79a8d0d8455aab2799b68f</remote_sys_id>
+<state>loaded</state>
+<summary/>
+<sys_class_name>sys_remote_update_set</sys_class_name>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2021-01-15 14:13:40</sys_created_on>
+<sys_id>02516b942fbda8d0d8455aab2799b6d4</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2021-01-15 14:13:40</sys_updated_on>
+<update_set display_value=""/>
+<update_source display_value=""/>
+<updated/>
+</sys_remote_update_set>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="Global">global</application>
+<category>customer</category>
+<comments/>
+<name>sys_script_include_0c82be1c2f79a8d0d8455aab2799b6cf</name>
+<payload>&lt;?xml version="1.0" encoding="UTF-8"?&gt;&lt;record_update table="sys_script_include"&gt;&lt;sys_script_include action="INSERT_OR_UPDATE"&gt;&lt;access&gt;package_private&lt;/access&gt;&lt;active&gt;true&lt;/active&gt;&lt;api_name&gt;global.MIDServerCluster&lt;/api_name&gt;&lt;caller_access/&gt;&lt;client_callable&gt;false&lt;/client_callable&gt;&lt;description&gt;********************************&amp;#13;
+Better MidServerCluster&amp;#13;
+&amp;#13;
+This is a replacement for the OOB MidServerCluster Script Include (sys_script_include.do?sys_id=f6c69a020a0006bc36db905d8d02dfc2)&amp;#13;
+More information can be found here: https://github.com/bmoers/sn-better-mid-cluster-mgmt&amp;#13;
+&amp;#13;
+To enable debug log, set "better_mid_server.cluster.debug" to "true"&amp;#13;
+&amp;#13;
+********************************&amp;#13;
+&lt;/description&gt;&lt;name&gt;MIDServerCluster&lt;/name&gt;&lt;script&gt;&lt;![CDATA[/**
+ * This is a drop in replacement for the OOB MIDServerCluster script include.
+ * Make sure the OOB script include /sys_script_include.do?sys_id=f6c69a020a0006bc36db905d8d02dfc2 is active=false!
+ *
+ * Unfortunately the OOB LB/FO script is not very mature and assigns always the same FO agent in case of agent down.
+ *
+ * For more details see https://github.com/bmoers/sn-better-mid-cluster-mgmt/blob/master/README.md
+ * The source and test cases can be found here https://github.com/bmoers/sn-better-mid-cluster-mgmt
+ * 
+ * @class 
+ * @author Boris Moers [admin.moers]
+ * @requires global.module:sys_script_include.SNC#ECCAgentCache
+ * @memberof global.module:sys_script_include
+ */
+var MIDServerCluster = Class.create();
+MIDServerCluster.prototype = /** @lends global.module:sys_script_include.MIDServerCluster.prototype */ {
+
+
+    UP_STATE: 'Up',
+    FAILOVER: 'Failover',
+
+    log: {
+        /**
+         * Debug logger
+         * 
+         * @returns {undefined}
+         */
+        debug: function () {
+            if (gs.getProperty('better_mid_server.cluster.debug', 'false') != 'true')
+                return;
+            var args = Array.prototype.slice.call(arguments);
+            if (args.length)
+                args[0] = '[Better MID Cluster] : ' + args[0];
+            gs.debug.apply(this, args);
+        },
+        /**
+         * Info logger
+         * 
+         * @returns {undefined}
+         */
+        info: function () {
+            var args = Array.prototype.slice.call(arguments);
+            if (args.length)
+                args[0] = '[Better MID Cluster] : ' + args[0];
+            gs.info.apply(this, args);
+        }
+    },
+
+    /**
+     * Constructor
+     * 
+     * @param {GlideRecord} agentGr ecc_agent which requires to be LB/FO
+     * @param {String} requestedClusterType "Failover" or "Load Balance" - actually ignored
+     * @returns {undefined}
+     */
+    initialize: function (agentGr, requestedClusterType) {
+        var self = this;
+
+        self.agentGr = agentGr;
+
+        // get all defined clusters and members on the platform
+        self.allClusters = self._getAllClusterMembers();
+
+    },
+
+    /**
+     * Indicate if a LB/FO agent is available
+     * 
+     * @returns {boolean}
+     */
+    clusterExists: function () {
+        var self = this;
+        if (!self.agentGr)
+            return false;
+
+        var agentSysId = self.agentGr.getValue('sys_id');
+        var currAgent = self.allClusters.agents[agentSysId];
+        // ensure its a boolean
+        return !!(currAgent &amp;&amp; (currAgent.failover.length &gt; 0 || currAgent.loadBalance.length &gt; 0));
+
+    },
+
+
+    /**
+     * Return the name of the agent to be LB/FO to.
+     * This is only name of the ecc_agent ane must be prepended with "mid.server."
+     * 
+     * @returns {string} the agent name to LB/FO to
+     */
+    getClusterAgent: function () {
+        var self = this;
+        if (!self.agentGr)
+            return;
+
+        return self._findLoadBalancerForAgent(self.agentGr, self.allClusters);
+    },
+
+    /**
+     * Return the names of all up and running agents.
+     * 
+     * @returns {Array} agent names
+     */
+    getClusterAgents: function () {
+        var self = this;
+        if (!self.agentGr)
+            return [];
+
+        return Object.keys(self.allClusters.agents).filter(function (sysId) {
+            return self.allClusters.agents[sysId].up;
+        }).map(function (sysId) {
+            return self.allClusters.agents[sysId].name;
+        });
+    },
+
+
+
+    /**
+     * Get the clusterMember construct.
+     * 
+     * @protected
+     * @returns {Object} of following structure : {
+            agents: {
+                SYS_ID: {
+                    failover: [],
+                    loadBalance: [],
+                    up: true,
+                    name : name
+                }
+            },
+            failover: {
+                SYS_ID : {
+                    agentsUp: []
+                }
+            },
+            loadBalance: {
+                SYS_ID: {
+                    agentsUp : []
+                    agentsDown : []
+                }
+            }
+        };
+    */
+    _getAllClusterMembers: function () {
+        var self = this;
+
+        // get all clusters
+        var gr = new GlideRecord('ecc_agent_cluster_member_m2m');
+        gr.query();
+        var allClusters = {
+            agents: {},
+            failover: {},
+            loadBalance: {}
+        };
+
+        // build up 'allClusters' object
+        while (gr.next()) {
+
+            var clusterSysId = gr.cluster.toString();
+            var clusterType = gr.cluster.type.toString(); // 'Load Balance' / 'Failover'
+            var type = (clusterType == self.FAILOVER) ? 'failover' : 'loadBalance';
+            var isFailover = (clusterType == self.FAILOVER);
+
+            var agentSysId = gr.agent.toString();
+            var agentName = gr.agent.name.toString();
+            var agentStatus = gr.agent.status.toString(); // 'Up' / 'Down' / 'Upgrade Failed'
+            var isUp = (agentStatus == self.UP_STATE);
+
+            // all agents
+            if (!allClusters.agents[agentSysId])
+                allClusters.agents[agentSysId] = { failover: [], loadBalance: [], up: isUp, name: agentName };
+
+            allClusters.agents[agentSysId][type].push(clusterSysId);
+
+            // for the clusters we need all agents, regardless if up or down
+            if (!allClusters[type][clusterSysId]) {
+                allClusters[type][clusterSysId] = { agentsUp: [] };
+                if (!isFailover) {
+                    // only load balancer have agentsDown
+                    allClusters[type][clusterSysId].agentsDown = [];
+                }
+            }
+
+            /*
+                add all LoadBalance clusters agents
+                add all running failover clusters agents
+            */
+            if (!isFailover) {
+                if (isUp) {
+                    allClusters[type][clusterSysId].agentsUp.push(agentSysId);
+                } else {
+                    allClusters[type][clusterSysId].agentsDown.push(agentSysId);
+                }
+            } else if (isFailover &amp;&amp; isUp) {
+                // only keep the running failover agents
+                allClusters[type][clusterSysId].agentsUp.push(agentSysId);
+            }
+
+        }
+
+        self.log.debug('_getAllClusterMembers : ' + JSON.stringify(allClusters));
+        return allClusters;
+    },
+
+
+    /**
+     * Find a load balancer and if required failover agents
+     * 
+     * @protected
+     * @param {GlideRecord} agentGr
+     * @param {Object} allClusters
+     * @returns {String} name of the agent to LB/FO to
+     */
+    _findLoadBalancerForAgent: function (agentGr, allClusters) {
+        var self = this;
+
+        if (!agentGr)
+            return;
+
+        var agentSysId = agentGr.getValue('sys_id');
+        var agentFallbackName = agentGr.getValue('name');
+
+
+        /**
+         * Helper function to make fields in an array unique.
+         * 
+         * @param {*} value
+         * @param {*} index
+         * @param {*} arr
+         * @returns {BinaryExpression}
+         */
+        var onlyUnique = function (value, index, arr) {
+            return arr.indexOf(value) === index;
+        };
+
+        /**
+         * Find all capabilities for the passed agents in ONE sql query.
+         * 
+         * @param {Array} agentSysIds
+         * @returns {Object} object with capabilities per key
+         */
+        var _getAgentCapabilities = function (agentSysIds) {
+
+            if (!agentSysIds)
+                return null;
+
+            var agentCaps = {};
+            var agentSysIdArr = Array.isArray(agentSysIds) ? agentSysIds : [agentSysIds];
+
+            var gr = new GlideRecord("ecc_agent_capability_m2m");
+            gr.addQuery("agent", 'IN', agentSysIdArr.join(','));
+            gr.query();
+
+            self.log.debug("_getAgentCapabilities : ecc_agent_capability_m2m.do " + gr.getEncodedQuery());
+
+            while (gr.next()) {
+
+                var sysId = gr.getValue('agent');
+                if (!agentCaps[sysId])
+                    agentCaps[sysId] = [];
+
+                if (JSUtil.nil(gr.capability.value)) {
+                    agentCaps[sysId].push(gr.capability.capability.toString());
+                } else {
+                    agentCaps[sysId].push(gr.capability.capability.toString() + ':' + gr.capability.value.toString());
+
+                }
+            }
+
+            return agentCaps;
+        };
+
+        /**
+         * Check if Array2 is in Array1
+         * 
+         * @param {*} array1
+         * @param {*} array2
+         * @returns {Boolean}
+         */
+        var _isSubset = function (array1, array2) {
+            var resArray = new ArrayUtil().intersect(array1, array2);
+            if (resArray.length == array1.length)
+                return true;
+
+            return false;
+        };
+
+        /**
+         * Find all cluster agents which have the same or more capabilities
+         * In contrast to the OOB ServiceNow function, this also treats 'ALL' as
+         * capable to take over all other capabilities.
+         * 
+         * @param {String} ofAgentSysId
+         * @param {Array} failoverAgents
+         * @returns {Array} list holding the sys_id of the capable agents
+         */
+        var _filterOnCapabilities = function (ofAgentSysId, failoverAgents) {
+
+            var agentCaps = _getAgentCapabilities(ofAgentSysId)[ofAgentSysId];
+
+            var newClusterAgents = [];
+            if (!agentCaps)
+                return newClusterAgents;
+
+            var foCapabilities = _getAgentCapabilities(failoverAgents);
+            if (!foCapabilities)
+                return newClusterAgents;
+
+
+            Object.keys(foCapabilities).forEach(function (foAgentSysId) {
+                var candidateCaps = foCapabilities[foAgentSysId];
+                self.log.debug("_filterOnCapabilities : Agent caps " + JSON.stringify(agentCaps) + " - candidateCaps :" + JSON.stringify(candidateCaps));
+
+                // if the candidate can do 'ALL' it is always capable to take over
+                // OR the candidate capabilities are more or equal the current
+                if (candidateCaps.indexOf('ALL') !== -1 || _isSubset(agentCaps, candidateCaps)) {
+                    newClusterAgents.push(foAgentSysId);
+                }
+            });
+
+            return newClusterAgents;
+        };
+
+
+
+        /**
+         * Randomly picks one agent from the passed list of agents
+         * 
+         * @param {Array} sameCapFoAgents
+         * @returns {String} random agent name
+         */
+        var getRandomMidServer = function (sameCapFoAgents) {
+            self.log.debug("getRandomMidServer : up and running agents with same capabilities " + JSON.stringify(sameCapFoAgents));
+
+            var lbAgentsNum = sameCapFoAgents.length;
+            if (lbAgentsNum) {
+                var lbRandomPos = Math.floor(Math.random() * lbAgentsNum);
+                var lbRandomSysId = sameCapFoAgents[lbRandomPos];
+
+                var agentCache = new SNC.ECCAgentCache();
+                var gr = agentCache.getBySysId(lbRandomSysId);
+
+                if (gr) {
+                    return gr.getValue('name');
+                }
+            }
+            return null;
+        };
+
+        /**
+         * Finds one failover agent with the same capabilities
+         * 
+         * @param {Object} agent
+         * @returns {String} agent name
+         */
+        var getSameCapAgentFromFailover = function (agent) {
+            var upFailoverAgents = [];
+            agent.failover.forEach(function (foSysId) {
+                // find all the down load balancers nodes and replace it with one failover node
+                var fo = allClusters.failover[foSysId];
+                if (!fo)
+                    return;
+
+                upFailoverAgents = upFailoverAgents.concat(fo.agentsUp);
+            });
+
+            var sameCapFoAgents = _filterOnCapabilities(agentSysId, upFailoverAgents);
+            return getRandomMidServer(sameCapFoAgents);
+        };
+
+        /**
+         * Finds one load balanced agent with the same capabilities
+         * 
+         * @param {Object} agent
+         * @returns {String} agent name
+         */
+        var getSameCapAgentFromLoadBalance = function (agent) {
+            // list of agents to share the load
+            var upLoadBalanceAgents = [];
+            var downLoadBalanceAgents = [];
+            var upFailoverAgents = [];
+
+            // these are all load balancers to the current mid server
+            agent.loadBalance.forEach(function (lbSysId) {
+                // find all the down load balancers nodes and replace it with one failover node
+                var loadBalancer = allClusters.loadBalance[lbSysId];
+                if (!loadBalancer)
+                    return;
+
+                upLoadBalanceAgents = upLoadBalanceAgents.concat(loadBalancer.agentsUp);
+                downLoadBalanceAgents = downLoadBalanceAgents.concat(loadBalancer.agentsDown);
+
+            });
+
+            // remove duplicates
+            upLoadBalanceAgents = upLoadBalanceAgents.filter(onlyUnique);
+            downLoadBalanceAgents = downLoadBalanceAgents.filter(onlyUnique);
+
+            self.log.debug("getSameCapAgentFromLoadBalance : current agent load balancers " + JSON.stringify(agent.loadBalance));
+            self.log.debug("getSameCapAgentFromLoadBalance : current agent running load balancer partners " + JSON.stringify(upLoadBalanceAgents));
+            self.log.debug("getSameCapAgentFromLoadBalance : current agent stopped load balancer partners " + JSON.stringify(downLoadBalanceAgents));
+
+            downLoadBalanceAgents.forEach(function (downAgentSysId) {
+                var downAgent = allClusters.agents[downAgentSysId];
+                // check if there is a failover in place for this agent
+                if (!downAgent || downAgent.failover.length == 0)
+                    return;
+
+                downAgent.failover.forEach(function (failoverSysId) {
+                    var failoverCluster = allClusters.failover[failoverSysId];
+                    // check if the failover cluster has active agents
+                    if (!failoverCluster || failoverCluster.agentsUp.length == 0)
+                        return;
+
+                    upFailoverAgents = upFailoverAgents.concat(failoverCluster.agentsUp);
+                });
+            });
+
+            // remove duplicates
+            upFailoverAgents = upFailoverAgents.filter(onlyUnique);
+
+            self.log.debug("getSameCapAgentFromLoadBalance : up running failover agents " + JSON.stringify(upFailoverAgents) + " to take over from stopped " + JSON.stringify(downLoadBalanceAgents));
+            self.log.debug("getSameCapAgentFromLoadBalance : num down agents " + downLoadBalanceAgents.length);
+            self.log.debug("getSameCapAgentFromLoadBalance : num failover agents " + upFailoverAgents.length);
+
+            // if there are less or equal number of failover agents in place, take them all
+            if (upFailoverAgents.length &lt;= downLoadBalanceAgents.length) {
+                // we need all of them
+                upLoadBalanceAgents = upLoadBalanceAgents.concat(upFailoverAgents);
+            } else {
+                // there are more failover agents available then we need to have, random pick some
+                downLoadBalanceAgents.forEach(function () {
+                    var randomPos = Math.floor(Math.random() * upFailoverAgents.length);
+                    // select a random failover from the remaining list
+                    // splice makes the 'currentDownAgentsUpFailoverAgents' shorter by 1 every time it runs
+                    upLoadBalanceAgents.push(upFailoverAgents.splice(randomPos, 1)[0]);
+                });
+            }
+
+            self.log.debug("getSameCapAgentFromLoadBalance : up and running agents " + JSON.stringify(upLoadBalanceAgents));
+
+            var sameCapFoAgents = _filterOnCapabilities(agentSysId, upLoadBalanceAgents);
+            return getRandomMidServer(sameCapFoAgents);
+
+        };
+
+        // get the current agent object from that cluster
+        var currAgent = allClusters.agents[agentSysId];
+
+        // check if the agent has at least one failover or loadBalance agent
+        if (!currAgent || (currAgent.failover.length == 0 &amp;&amp; currAgent.loadBalance.length == 0)) {
+            // mid server has no failover or load balance configuration
+            self.log.debug("no lb/fo agents found for agent (sys_id) " + agentSysId);
+            return agentFallbackName;
+        }
+
+        // there are no LB but Failover agents
+        if (currAgent.loadBalance.length == 0 &amp;&amp; currAgent.failover.length != 0) {
+            // get one random failover with same capability
+            var foAgent = getSameCapAgentFromFailover(currAgent);
+            return foAgent || agentFallbackName;
+        }
+
+        var lbAgent = getSameCapAgentFromLoadBalance(currAgent);
+        return lbAgent || agentFallbackName;
+
+    },
+
+    type: 'MIDServerCluster'
+};
+]]&gt;&lt;/script&gt;&lt;sys_class_name&gt;sys_script_include&lt;/sys_class_name&gt;&lt;sys_created_by&gt;admin&lt;/sys_created_by&gt;&lt;sys_created_on&gt;2021-01-15 10:49:00&lt;/sys_created_on&gt;&lt;sys_id&gt;0c82be1c2f79a8d0d8455aab2799b6cf&lt;/sys_id&gt;&lt;sys_mod_count&gt;10&lt;/sys_mod_count&gt;&lt;sys_name&gt;MIDServerCluster&lt;/sys_name&gt;&lt;sys_package display_value="Global" source="global"&gt;global&lt;/sys_package&gt;&lt;sys_policy/&gt;&lt;sys_scope display_value="Global"&gt;global&lt;/sys_scope&gt;&lt;sys_update_name&gt;sys_script_include_0c82be1c2f79a8d0d8455aab2799b6cf&lt;/sys_update_name&gt;&lt;sys_updated_by&gt;admin&lt;/sys_updated_by&gt;&lt;sys_updated_on&gt;2021-01-15 13:37:32&lt;/sys_updated_on&gt;&lt;/sys_script_include&gt;&lt;/record_update&gt;</payload>
+<payload_hash>-635260528</payload_hash>
+<remote_update_set display_value="Better MID Cluster">02516b942fbda8d0d8455aab2799b6d4</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2021-01-15 14:13:40</sys_created_on>
+<sys_id>0a516b942fbda8d0d8455aab2799b6d4</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1770643f2de0000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2021-01-15 14:13:40</sys_updated_on>
+<table/>
+<target_name>MIDServerCluster</target_name>
+<type>Script Include</type>
+<update_domain>global</update_domain>
+<update_guid>78191f9c997da8d0956700f6d01a854b</update_guid>
+<update_guid_history>78191f9c997da8d0956700f6d01a854b:-635260528,2668d79c267da8d03ee3f637315025b5:790067972,9d079fd80e7da8d0dff7eac6200d8288:34492973,d7d69fd8687da8d0d33f067bb054c582:922309744,abc61b188f7da8d0658321a55349f4cf:1855119891,fdb65798707da8d0e43b1d5950fb4e3c:1932740816,09a61bd8817da8d0d3b5eabc717f1280:-885652508,c051cb9842f9a8d06341e65d8f2d8393:-137660844,2777b658d4b9a8d07359ee8ad20fdfba:1818726115,4c033a5034b9a8d09764ab7dd4b52aa4:-149983161,4882be1c2579a8d02acd4791d86376d2:2030608251</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="Global">global</application>
+<category>customer</category>
+<comments/>
+<name>sys_properties_e57372902fb9a8d0d8455aab2799b6af</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_properties"><sys_properties action="INSERT_OR_UPDATE"><choices/><description>Enabe Debugging for "MidServerCluster Script Include" sys_script_include.do?sys_id=0c82be1c2f79a8d0d8455aab2799b6cf</description><ignore_cache>false</ignore_cache><is_private>false</is_private><name>better_mid_server.cluster.debug</name><read_roles/><suffix/><sys_class_name>sys_properties</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2021-01-15 10:53:52</sys_created_on><sys_id>e57372902fb9a8d0d8455aab2799b6af</sys_id><sys_mod_count>1</sys_mod_count><sys_name>better_mid_server.cluster.debug</sys_name><sys_package display_value="Global" source="global">global</sys_package><sys_policy/><sys_scope display_value="Global">global</sys_scope><sys_update_name>sys_properties_e57372902fb9a8d0d8455aab2799b6af</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2021-01-15 13:35:30</sys_updated_on><type>boolean</type><value>false</value><write_roles/></sys_properties><sys_translated_text action="delete_multiple" query="documentkey=e57372902fb9a8d0d8455aab2799b6af"/></record_update>]]></payload>
+<payload_hash>-1586401851</payload_hash>
+<remote_update_set display_value="Better MID Cluster">02516b942fbda8d0d8455aab2799b6d4</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2021-01-15 14:13:40</sys_created_on>
+<sys_id>46516b942fbda8d0d8455aab2799b6d4</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>17706421c290000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2021-01-15 14:13:40</sys_updated_on>
+<table/>
+<target_name>better_mid_server.cluster.debug</target_name>
+<type>System Property</type>
+<update_domain>global</update_domain>
+<update_guid>9398d79cc07da8d0be233423aa8078bd</update_guid>
+<update_guid_history>9398d79cc07da8d0be233423aa8078bd:-1586401851,2793f290b3b9a8d0cea54af23aea0d6e:1694530698</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="Global">global</application>
+<category>customer</category>
+<comments/>
+<name>sys_script_include_f6c69a020a0006bc36db905d8d02dfc2</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include"><sys_script_include action="INSERT_OR_UPDATE"><access>package_private</access><active>false</active><api_name>global.MIDServerCluster</api_name><caller_access/><client_callable>false</client_callable><description>********************************&#13;
+This is the OOB version of MIDServerCluster and replaced by "Better MidServerCluster" sys_script_include.do?sys_id=0c82be1c2f79a8d0d8455aab2799b6cf&#13;
+&#13;
+********************************&#13;
+&#13;
+Takes care of finding the MID server cluster(s) for a given MID server and re-assigning the jobs if it's necessary.</description><name>MIDServerCluster</name><sys_class_name>sys_script_include</sys_class_name><sys_created_by>aleck.lin</sys_created_by><sys_created_on>2010-12-18 00:00:09</sys_created_on><sys_id>f6c69a020a0006bc36db905d8d02dfc2</sys_id><sys_mod_count>113</sys_mod_count><sys_name>MIDServerCluster</sys_name><sys_package display_value="MID Server" source="com.glideapp.agent">6ccceb238082230065177a4cb39b4379</sys_package><sys_policy/><sys_scope display_value="Global">global</sys_scope><sys_update_name>sys_script_include_f6c69a020a0006bc36db905d8d02dfc2</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2021-01-15 11:54:00</sys_updated_on></sys_script_include></record_update>]]></payload>
+<payload_hash>1413062025</payload_hash>
+<remote_update_set display_value="Better MID Cluster">02516b942fbda8d0d8455aab2799b6d4</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2021-01-15 14:13:40</sys_created_on>
+<sys_id>ca516b942fbda8d0d8455aab2799b6d4</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>17705e52b6b0000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2021-01-15 14:13:40</sys_updated_on>
+<table/>
+<target_name>MIDServerCluster</target_name>
+<type>Script Include</type>
+<update_domain>global</update_domain>
+<update_guid>d461cb9854f9a8d0a149a0d08e5df760</update_guid>
+<update_guid_history>d461cb9854f9a8d0a149a0d08e5df760:1413062025,8172ba1c6a79a8d0c75431d25d1f3642:-1529673452,4572ba1c6a79a8d0187665fa09f2373f:769621187</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+</unload>

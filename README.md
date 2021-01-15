@@ -22,17 +22,35 @@ In case of MID server down the [MIDServerCluster] script include is designed to 
 
 The OOB capability check is comparing the capabilities one-by-one. If the failing agent hast e.g. 2 capabilities and the failover with one `ALL` capability will not be selected.
 
-### Better MID Cluster Management Business Rule
+### Better MID Cluster Management
 
-The [findLoadBalancerForAgent](better-mid-cluster-mgm.js#L17) script implements the 'To be rule' and fixes the capability issue. It also only requires two GlideRecord queries to lookup the corresponding agent ('ecc_agent_cluster_member_m2m' and 'ecc_agent_capability_m2m').
+There are two options to install the Better MID Server Cluster Management:
 
-#### Installation
+#### Script Include Replacement (*suggested*)
+
+> If you're ok with changing the OOB script include OR **use the MID discovery feature**, use this version.
+
+The [BetterMIDServerCluster](better-mid-server-cluster.js) script include implements the same API as the OOB script [MIDServerCluster] but does things right, implements the 'To be rule' and fixes the capability issue. It also only requires two GlideRecord queries to lookup the corresponding agent ('ecc_agent_cluster_member_m2m' and 'ecc_agent_capability_m2m'). It also works natively with the [Fail over MID server] event.
+
+To install follow these steps:
+
+1. Install the [Better MID Server Cluster] update set which contains following changes:
+    1. Disable the OOB [MIDServerCluster] script include.
+    2. Install the [BetterMIDServerCluster] replacement.
+    3. Add the 'better_mid_server.cluster.debug' system property to control debug log.
+2. Add a comment to the platform upgrade run book to document the change and describe how to deal with upgrade conflicts in the future.
+
+#### Business Rule (*legacy*)
+  
+> If you don't want to change the OOB script include and **don't use the MID discovery feature**, use this version.
+  
+The [findLoadBalancerForAgent](better-mid-cluster-mgm.js#L17) script implements the the same as the script include version above - but it does not replace any existing OOB scripts.
+
+To install follow these steps:
 
 1. Disable (active = false) the [MID Server Cluster Management] Business Rule on 'ecc_queue'
 2. Install the [Better MID Server Cluster Management] update set
 3. Add a comment to the platform upgrade run book to document the change and describe how to deal with upgrade conflicts in the future.
-
-
 
 ## ECC Queue Failover of running import jobs
 
@@ -73,7 +91,7 @@ To prevent from importing duplicates **ONE** of the following can be done:
         ic.clean();
         ```
 
-- Disable the failover event script (**suggested**, except you use discovery). Reassigning started jobs to another agent is obviously causing more issues than it solves. To prevent the platform from doing this set `active=false` on [Fail over MID server]. The only downside of this is that the DiscoveryAgents are also not reassigned.
+- Disable the failover event script (**suggested**, except you use **discovery**). Reassigning started jobs to another agent is obviously causing more issues than it solves. To prevent the platform from doing this set `active=false` on [Fail over MID server]. The only downside of this is that the DiscoveryAgents are also not reassigned.
 
 ## MID cluster debugging
 
@@ -85,9 +103,12 @@ Set the system property `mid_server.cluster.debug` to `true` to enable logging i
 
 ### Script Include
 
-- [MIDServerCluster], called by:
-  - [MID Server Cluster Management] Business Rule
-  - [Fail over MID server] Script Action
+- [MIDServerCluster] OOB, called by:
+  - [MID Server Cluster Management] OOB Business Rule
+  - [Fail over MID server] OOB Script Action
+- [Better MID Server Cluster], as a replacement for above, also called by
+  - [MID Server Cluster Management] OOB Business Rule
+  - [Fail over MID server] OOB Script Action
 
 ### Business Rule
 
@@ -95,9 +116,11 @@ Set the system property `mid_server.cluster.debug` to `true` to enable logging i
 
 ### Script Action
 
-- [Fail over MID server] on 'mid_server.down' event, to re assign all 'ready' or 'processing' jobs to a failover agent
+- [Fail over MID server] OOB 'mid_server.down' event, to re assign all 'ready' or 'processing' jobs to a failover agent
 
 [MIDServerCluster]: https://dev000000.service-now.com/sys_script_include.do?sys_id=f6c69a020a0006bc36db905d8d02dfc2
 [MID Server Cluster Management]: https://dev000000.service-now.com/sys_script.do?sys_id=297749870a0006bc2145d31c2d2335b9
 [Fail over MID server]: https://dev000000.service-now.com/sysevent_script_action.do?sys_id=f6c24d230a0006bc394931345fba7a8a
-[Better MID Server Cluster Management]: better-mid-cluster-mgm.xml
+
+[Better MID Server Cluster Management]: us/better-mid-cluster-mgm.xml
+[Better MID Server Cluster]: us/better-mid-cluster-us.xml
