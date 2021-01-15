@@ -1,24 +1,24 @@
 version: "3.6"
 
 services:
-  mid_right:
-    image: moers/mid-server:newyork.12-17-2019_0856
-    hostname: mid-right
+  mid-right-1:
+    image: moers/mid-server:newyork.latest 
+    hostname: mid-right-1
     env_file: .env
   
-  mid_left:
-    image: moers/mid-server:newyork.12-17-2019_0856
-    hostname: mid-left
+  mid-left-1:
+    image: moers/mid-server:newyork.latest
+    hostname: mid-left-1
     env_file: .env
 
-  mid_red:
-    image: moers/mid-server:newyork.12-17-2019_0856
-    hostname: mid-red
+  mid-right-2:
+    image: moers/mid-server:newyork.latest
+    hostname: mid-right-2
     env_file: .env
 
-  mid_green:
-    image: moers/mid-server:newyork.12-17-2019_0856
-    hostname: mid-green
+  mid-left-2:
+    image: moers/mid-server:newyork.latest
+    hostname: mid-left-2
     env_file: .env
 
   db:
