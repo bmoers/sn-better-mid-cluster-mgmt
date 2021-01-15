@@ -125,4 +125,4 @@ Set the system property `mid_server.cluster.debug` to `true` to enable logging i
 
 [Better MID Server Cluster Management]: us/better-mid-cluster-mgm.xml
 [Better MID Server Cluster]: us/better-mid-cluster-us.xml
-[BetterMIDServerCluster] : better-mid-server-cluster.js
+[BetterMIDServerCluster]: better-mid-server-cluster.js
